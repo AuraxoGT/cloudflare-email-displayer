@@ -8,8 +8,27 @@ const port = process.env.PORT || 3000;
 // Connect to Postgres using the INTERNAL URL
 const sql = postgres(process.env.DATABASE_URL);
 
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
+const ALLOWED_ID = '959449311366766622';
+
+// 🔐 Strict Security: Only allow your specific dashboard domain
+const allowedOrigin = process.env.FRONTEND_URL || '*';
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || origin === allowedOrigin || allowedOrigin === '*') {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS Lock: Access Denied'));
+        }
+    }
+}));
+
+// In-memory state store for CSRF protection
+let oauthStates = new Set();
 
 // SSE Clients for real-time push
 let clients = [];
@@ -22,10 +41,23 @@ const broadcast = (data) => {
 // Auth middleware (Optional but recommended)
 const auth = (req, res, next) => {
     const key = req.headers.authorization?.replace('Bearer ', '');
-    if (process.env.PROXY_KEY && key !== process.env.PROXY_KEY) {
-        return res.status(401).send('Unauthorized');
+
+    // 1. Check for Worker key (Admin Key)
+    if (process.env.PROXY_KEY && key === process.env.PROXY_KEY) {
+        return next();
     }
-    next();
+
+    // 2. Check for User JWT
+    try {
+        const decoded = jwt.verify(key, JWT_SECRET);
+        if (decoded.id === ALLOWED_ID) {
+            return next();
+        }
+    } catch (e) {
+        // JWT verification failed, or no JWT provided
+    }
+
+    res.status(401).send('Unauthorized');
 };
 
 // 1. Receive Processed Email from Worker
@@ -68,6 +100,69 @@ app.get('/api/emails', auth, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send(err.message);
+    }
+});
+
+// 4. Discord OAuth2 Routes
+app.get('/api/auth/login', (req, res) => {
+    const state = crypto.randomBytes(16).toString('hex');
+    oauthStates.add(state);
+
+    // Cleanup state after 10 mins
+    setTimeout(() => oauthStates.delete(state), 600000);
+
+    const client_id = process.env.DISCORD_CLIENT_ID;
+    const redirect_uri = encodeURIComponent(process.env.DISCORD_REDIRECT_URI);
+    const url = `https://discord.com/api/oauth2/authorize?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=identify&state=${state}`;
+    res.json({ url, state });
+});
+
+app.get('/api/auth/callback', async (req, res) => {
+    const { code, state } = req.query;
+
+    // 🛡️ CSRF Protection: Verify state
+    if (!state || !oauthStates.has(state)) {
+        return res.status(403).json({ error: 'Invalid OAuth State (Possible CSRF Attack)' });
+    }
+    oauthStates.delete(state);
+
+    if (!code) return res.status(400).send('No code provided');
+
+    try {
+        // Exchange code for token
+        const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+            method: 'POST',
+            body: new URLSearchParams({
+                client_id: process.env.DISCORD_CLIENT_ID,
+                client_secret: process.env.DISCORD_CLIENT_SECRET,
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: process.env.DISCORD_REDIRECT_URI,
+            }),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+
+        const tokenData = await tokenResponse.json();
+        if (!tokenData.access_token) throw new Error('Failed to exchange code');
+
+        // Get User Info
+        const userResponse = await fetch('https://discord.com/api/users/@me', {
+            headers: { Authorization: `Bearer ${tokenData.access_token}` },
+        });
+
+        const userData = await userResponse.json();
+        const discord_id = userData.id;
+
+        if (discord_id !== ALLOWED_ID) {
+            return res.status(403).json({ error: 'EIK NAHUI GAIDY' });
+        }
+
+        // Generate JWT
+        const token = jwt.sign({ id: discord_id, username: userData.username }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: userData });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Auth Error');
     }
 });
 

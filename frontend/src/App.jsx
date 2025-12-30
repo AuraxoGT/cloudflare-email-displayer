@@ -29,9 +29,52 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [copiedId, setCopiedId] = useState(null);
 
+  // Auth State
+  const [token, setToken] = useState(localStorage.getItem('auth_token'));
+  const [user, setUser] = useState(null);
+  const [authError, setAuthError] = useState(null);
+
   useEffect(() => {
+    // Handle Callback from Discord
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    const savedState = sessionStorage.getItem('oauth_state');
+
+    if (code) {
+      if (state !== savedState) {
+        setAuthError('Security verification failed (State Mismatch)');
+        return;
+      }
+      sessionStorage.removeItem('oauth_state');
+
+      const handleCallback = async () => {
+        setLoading(true);
+        try {
+          const resp = await fetch(`${PROXY_URL.replace(/\/$/, '')}/api/auth/callback?code=${code}&state=${state}`);
+          const data = await resp.json();
+          if (data.token) {
+            localStorage.setItem('auth_token', data.token);
+            setToken(data.token);
+            setUser(data.user);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else if (data.error) {
+            setAuthError(data.error);
+          }
+        } catch (err) {
+          setAuthError('Connection Error');
+        } finally {
+          setLoading(false);
+        }
+      };
+      handleCallback();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
     // 1. Real-time Push (SSE)
-    const streamUrl = `${PROXY_URL.replace(/\/$/, '')}/api/emails/stream`;
+    const streamUrl = `${PROXY_URL.replace(/\/$/, '')}/api/emails/stream?token=${token}`;
     const es = new EventSource(streamUrl);
 
     es.onmessage = (event) => {
@@ -45,6 +88,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     let interval;
     const fetchEmails = async (isManual = false) => {
       if (!PROXY_URL) {
@@ -58,9 +105,15 @@ function App() {
         const url = `${PROXY_URL.replace(/\/$/, '')}/api/emails`;
         const resp = await fetch(url, {
           headers: {
-            'Authorization': `Bearer ${PROXY_KEY}`
+            'Authorization': `Bearer ${token}`
           }
         });
+
+        if (resp.status === 401) {
+          localStorage.removeItem('auth_token');
+          setToken(null);
+          return;
+        }
 
         if (!resp.ok) throw new Error(`Proxy Error: ${resp.statusText}`);
 
@@ -78,6 +131,36 @@ function App() {
     interval = setInterval(() => fetchEmails(false), 30000);
     return () => clearInterval(interval);
   }, [refreshTrigger]);
+
+  const handleLogin = async () => {
+    try {
+      const resp = await fetch(`${PROXY_URL.replace(/\/$/, '')}/api/auth/login`);
+      const { url, state } = await resp.json();
+      sessionStorage.setItem('oauth_state', state);
+      window.location.href = url;
+    } catch (err) {
+      setAuthError('OAuth Service Offline');
+    }
+  };
+
+  if (authError) {
+    return (
+      <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+        <h1 style={{ color: 'red', fontSize: '3rem', fontWeight: '900' }}>{authError}</h1>
+        {authError === 'EIK NAHUI GAIDY' && <div style={{ marginTop: '20px', fontSize: '10rem' }}>🖕</div>}
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
+        <button className="verify-btn" onClick={handleLogin} style={{ width: 'auto', padding: '20px 40px' }}>
+          Login with Discord
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="container" style={{ paddingTop: '20px' }}>
