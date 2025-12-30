@@ -22,12 +22,27 @@ function cleanBody(body) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
 function App() {
   const [emails, setEmails] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    // 1. Real-time Push (SSE)
+    const streamUrl = `${PROXY_URL.replace(/\/$/, '')}/api/emails/stream`;
+    const es = new EventSource(streamUrl);
+
+    es.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'new-email') {
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     let interval;
@@ -62,9 +77,9 @@ function App() {
     };
 
     fetchEmails();
-    interval = setInterval(() => fetchEmails(false), 3000); // Super fast 3s polling
+    interval = setInterval(() => fetchEmails(false), 30000); // Slower fallback polling (30s)
     return () => clearInterval(interval);
-  }, [filter]);
+  }, [filter, refreshTrigger]);
 
   const handleManualRefresh = () => {
     // We already have a fast interval, but users love pushing buttons
