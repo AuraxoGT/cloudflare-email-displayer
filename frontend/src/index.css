@@ -44,9 +44,50 @@ body {
   font-size: 1.5rem;
   margin: 0;
   background: linear-gradient(135deg, #fff 0%, #666 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 600;
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text);
+}
+
+.pulse {
+  width: 6px;
+  height: 6px;
+  background-color: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 .filters {
@@ -68,8 +109,8 @@ body {
 }
 
 .filter-btn:hover {
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .filter-btn.active {
@@ -90,8 +131,8 @@ body {
   transition: transform 0.2s, border-color 0.2s;
 }
 
-.email-card:hover { 
-  border-color: rgba(255,255,255,0.15);
+.email-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
   transform: translateY(-2px);
 }
 
@@ -107,10 +148,10 @@ body {
   letter-spacing: 0.05em;
 }
 
-.time { 
-  font-size: 0.8rem; 
-  opacity: 0.5; 
-  float: right; 
+.time {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  float: right;
 }
 
 .subject {
@@ -120,14 +161,14 @@ body {
   margin-bottom: 4px;
 }
 
-.from { 
-  font-size: 0.9rem; 
-  opacity: 0.6; 
-  margin-bottom: 20px; 
+.from {
+  font-size: 0.9rem;
+  opacity: 0.6;
+  margin-bottom: 20px;
 }
 
 .otp-container {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 16px;
   padding: 24px;
   text-align: center;
@@ -135,11 +176,11 @@ body {
   margin-top: 8px;
 }
 
-.otp-label { 
-  font-size: 0.75rem; 
-  text-transform: uppercase; 
-  opacity: 0.4; 
-  margin-bottom: 10px; 
+.otp-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.4;
+  margin-bottom: 10px;
   letter-spacing: 0.1em;
 }
 
@@ -153,8 +194,8 @@ body {
   transition: transform 0.1s;
 }
 
-.otp-code:active { 
-  transform: scale(0.96); 
+.otp-code:active {
+  transform: scale(0.96);
 }
 
 .raw-content {
@@ -170,10 +211,10 @@ body {
   mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
 }
 
-.no-emails { 
-  text-align: center; 
-  padding: 120px 20px; 
-  opacity: 0.3; 
+.no-emails {
+  text-align: center;
+  padding: 120px 20px;
+  opacity: 0.3;
   font-size: 1.1rem;
 }
 
@@ -208,19 +249,19 @@ body {
   font-size: 1rem;
 }
 
-.verify-btn:hover { 
-  transform: translateY(-2px); 
-  background: #4f46e5; 
+.verify-btn:hover {
+  transform: translateY(-2px);
+  background: #4f46e5;
   box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
 }
 
-.verify-btn:active { 
-  transform: scale(0.98); 
+.verify-btn:active {
+  transform: scale(0.98);
 }
 
 .error-banner {
-  background: rgba(255,68,68,0.1);
-  border: 1px solid rgba(255,68,68,0.2);
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.2);
   color: #ff6666;
   padding: 16px 20px;
   border-radius: 16px;
@@ -239,6 +280,11 @@ body {
 }
 
 @keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }

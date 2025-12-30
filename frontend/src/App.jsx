@@ -30,14 +30,15 @@ function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchEmails = async () => {
+    let interval;
+    const fetchEmails = async (isManual = false) => {
       if (!PROXY_URL) {
         setError('Missing VITE_PROXY_URL in .env');
         setLoading(false);
         return;
       }
 
-      setLoading(true);
+      if (isManual) setLoading(true);
       try {
         const url = `${PROXY_URL.replace(/\/$/, '')}/api/emails${filter === 'otp' ? '?filter=otp' : ''}`;
         const resp = await fetch(url, {
@@ -49,6 +50,8 @@ function App() {
         if (!resp.ok) throw new Error(`Proxy Error: ${resp.statusText}`);
 
         const data = await resp.json();
+
+        // Check for new emails to show a notification potentially (optional future extra)
         setEmails(data);
         setError(null);
       } catch (err) {
@@ -59,15 +62,33 @@ function App() {
     };
 
     fetchEmails();
-    const interval = setInterval(fetchEmails, 10000); // Polling every 10s
+    interval = setInterval(() => fetchEmails(false), 3000); // Super fast 3s polling
     return () => clearInterval(interval);
   }, [filter]);
+
+  const handleManualRefresh = () => {
+    // We already have a fast interval, but users love pushing buttons
+    window.location.reload();
+  };
 
   return (
     <div className="container">
       <div className="nav">
-        <h1>AI Email Hub</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h1>AI Email Hub</h1>
+          <div className="live-indicator">
+            <div className="pulse"></div>
+            <span>LIVE</span>
+          </div>
+        </div>
         <div className="filters">
+          <button
+            className="filter-btn"
+            style={{ marginRight: '8px', opacity: 0.5 }}
+            onClick={handleManualRefresh}
+          >
+            Refresh
+          </button>
           <button
             className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
