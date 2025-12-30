@@ -1,27 +1,23 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import './index.css';
 
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || '';
-const PROXY_KEY = import.meta.env.VITE_PROXY_KEY || '';
+const PROXY_URL = import.meta.env.VITE_PROXY_URL;
 
-function formatDate(iso) {
-  if (!iso) return '';
-  const date = new Date(iso);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function cleanName(from) {
-  return from.split('<')[0].trim().replace(/"/g, '');
-}
-
-function cleanBody(body) {
-  if (!body) return '';
-  return body
+function cleanBody(text) {
+  if (!text) return '';
+  return text
     .replace(/<[^>]+>/g, ' ')
     .replace(/&[a-z]+;/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 function App() {
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,40 +25,41 @@ function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [copiedId, setCopiedId] = useState(null);
 
-  // Auth State
   const [token, setToken] = useState(localStorage.getItem('auth_token'));
-  const [user, setUser] = useState(null);
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    // Handle Callback from Discord
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const state = params.get('state');
-    const savedState = sessionStorage.getItem('oauth_state');
+    const savedState = sessionStorage.getItem('oauth_state') || localStorage.getItem('oauth_state');
 
     if (code) {
-      if (state !== savedState) {
-        setAuthError('Security verification failed (State Mismatch)');
+      if (!state || state !== savedState) {
+        console.error('State Mismatch:', { received: state, saved: savedState });
+        setAuthError('Security verification failed. Please try logging in again.');
         return;
       }
+
+      // Clear states
       sessionStorage.removeItem('oauth_state');
+      localStorage.removeItem('oauth_state');
 
       const handleCallback = async () => {
         setLoading(true);
         try {
           const resp = await fetch(`${PROXY_URL.replace(/\/$/, '')}/api/auth/callback?code=${code}&state=${state}`);
           const data = await resp.json();
+
           if (data.token) {
             localStorage.setItem('auth_token', data.token);
             setToken(data.token);
-            setUser(data.user);
             window.history.replaceState({}, document.title, window.location.pathname);
           } else if (data.error) {
             setAuthError(data.error);
           }
         } catch (err) {
-          setAuthError('Connection Error');
+          setAuthError('Could not verify identity. Check server status.');
         } finally {
           setLoading(false);
         }
@@ -73,7 +70,7 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
-    // 1. Real-time Push (SSE)
+
     const streamUrl = `${PROXY_URL.replace(/\/$/, '')}/api/emails/stream?token=${token}`;
     const es = new EventSource(streamUrl);
 
@@ -85,28 +82,19 @@ function App() {
     };
 
     return () => es.close();
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (!token) {
       setLoading(false);
       return;
     }
-    let interval;
-    const fetchEmails = async (isManual = false) => {
-      if (!PROXY_URL) {
-        setError('Missing VITE_PROXY_URL in .env');
-        setLoading(false);
-        return;
-      }
 
-      if (isManual) setLoading(true);
+    let interval;
+    const fetchEmails = async () => {
       try {
-        const url = `${PROXY_URL.replace(/\/$/, '')}/api/emails`;
-        const resp = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const resp = await fetch(`${PROXY_URL.replace(/\/$/, '')}/api/emails`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (resp.status === 401) {
@@ -115,8 +103,7 @@ function App() {
           return;
         }
 
-        if (!resp.ok) throw new Error(`Proxy Error: ${resp.statusText}`);
-
+        if (!resp.ok) throw new Error('Failed to fetch');
         const data = await resp.json();
         setEmails(data);
         setError(null);
@@ -128,115 +115,103 @@ function App() {
     };
 
     fetchEmails();
-    interval = setInterval(() => fetchEmails(false), 30000);
+    interval = setInterval(fetchEmails, 30000);
     return () => clearInterval(interval);
-  }, [refreshTrigger]);
+  }, [token, refreshTrigger]);
 
   const handleLogin = async () => {
     try {
       const resp = await fetch(`${PROXY_URL.replace(/\/$/, '')}/api/auth/login`);
       const { url, state } = await resp.json();
+      // Store in both for reliability
       sessionStorage.setItem('oauth_state', state);
+      localStorage.setItem('oauth_state', state);
       window.location.href = url;
     } catch (err) {
-      setAuthError('OAuth Service Offline');
+      setAuthError('Authentication server is offline.');
     }
+  };
+
+  const copyToClipboard = (id, text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (authError) {
     return (
-      <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
-        <h1 style={{ color: 'red', fontSize: '3rem', fontWeight: '900' }}>{authError}</h1>
-        {authError === 'EIK NAHUI GAIDY' && <div style={{ marginTop: '20px', fontSize: '10rem' }}>🖕</div>}
+      <div className="auth-screen">
+        <div className="glass-card login-card">
+          <h1 className="rejection-text">{authError}</h1>
+          <div className="middle-finger">🖕</div>
+          <button className="verify-btn" style={{ marginTop: '40px', background: 'var(--glass-border)' }} onClick={() => window.location.href = '/'}>
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
   if (!token) {
     return (
-      <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' }}>
-        <button className="verify-btn" onClick={handleLogin} style={{ width: 'auto', padding: '20px 40px' }}>
-          Login with Discord
-        </button>
+      <div className="auth-screen">
+        <div className="glass-card login-card">
+          <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🔐</div>
+          <h1 style={{ color: '#fff', marginBottom: '30px', fontWeight: '800' }}>Access Restricted</h1>
+          <button className="verify-btn" onClick={handleLogin}>
+            Sign in with Discord
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container" style={{ paddingTop: '20px' }}>
-
-      {error && (
-        <div className="error-banner">
-          <strong>Connection Error:</strong> {error}
-          <br />
-          <p style={{ marginTop: '8px', fontSize: '0.8rem', opacity: 0.8 }}>
-            Make sure your Railway Proxy is running and VITE_PROXY_URL is correct.
-          </p>
-        </div>
-      )}
+    <div className="container">
+      {error && <div className="error-banner">⚠️ Connection Lost: {error}</div>}
 
       {loading && emails.length === 0 ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
           <div className="loading-spinner"></div>
         </div>
       ) : emails.length === 0 ? (
-        <div className="no-emails">No verification emails found.</div>
+        <div className="no-emails">Waiting for incoming verification emails...</div>
       ) : (
-        emails.map((e) => (
-          <div key={e.id} className="email-card">
-            <span className="time">{formatDate(e.created_at || e.timestamp)}</span>
-            <div
-              className="service-badge"
-              style={{ background: e.brand_color || '#333', color: 'white' }}
-            >
-              {e.service_name || 'Verification'}
-            </div>
-
-            {(e.otp_code || e.action_link) ? (
-              <div className="action-container">
-                {e.otp_code && (
-                  <div className="otp-container">
-                    <div className="otp-label">Verification Code</div>
-                    <div
-                      className="otp-code"
-                      onClick={() => {
-                        navigator.clipboard.writeText(e.otp_code);
-                        setCopiedId(e.id);
-                        setTimeout(() => setCopiedId(null), 2000);
-                      }}
-                    >
-                      {e.otp_code}
-                      {copiedId === e.id && <div className="copied-overlay">COPIED ✅</div>}
-                    </div>
-                  </div>
-                )}
-                {e.action_link && (
-                  <a
-                    href={e.action_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="verify-btn"
-                  >
-                    {e.action_label || 'Complete Verification'}
-                  </a>
-                )}
+        <div style={{ marginTop: '20px' }}>
+          {emails.map((e) => (
+            <div key={e.id} className="glass-card email-card">
+              <span className="time">{formatDate(e.created_at)}</span>
+              <div className="service-badge" style={{ background: e.brand_color || 'var(--accent)' }}>
+                {e.service_name || 'Verification'}
               </div>
-            ) : (
-              <>
-                <div className="subject">{e.subject}</div>
-                <div className="from">{cleanName(e.sender || e.from)}</div>
-                <div className="raw-content">{cleanBody(e.body_raw || e.raw)}</div>
-              </>
-            )}
 
-            <div
-              className="ai-tag"
-              style={{ opacity: 0.5, color: e.is_ai_result ? 'var(--accent)' : 'var(--text)' }}
-            >
-              {e.is_ai_result ? `AI Extracted (${e.ai_model || 'Gemini'})` : 'Smart Extraction'}
+              {e.otp_code ? (
+                <div className="otp-container">
+                  <div className="otp-label">Security Code</div>
+                  <div className="otp-code" onClick={() => copyToClipboard(e.id, e.otp_code)}>
+                    {e.otp_code}
+                    {copiedId === e.id && <div className="copied-badge">Copied</div>}
+                  </div>
+                  {e.action_link && (
+                    <a href={e.action_link} target="_blank" rel="noopener noreferrer" className="verify-btn" style={{ marginTop: '20px' }}>
+                      {e.action_label || 'Verify Now'}
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: '10px' }}>
+                  <div className="subject" style={{ color: '#fff', fontSize: '1.2rem', fontWeight: '700' }}>{e.subject}</div>
+                  <div className="raw-content">{cleanBody(e.body_raw)}</div>
+                  {e.action_link && (
+                    <a href={e.action_link} target="_blank" rel="noopener noreferrer" className="verify-btn" style={{ marginTop: '20px' }}>
+                      {e.action_label || 'Complete Verification'}
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );
