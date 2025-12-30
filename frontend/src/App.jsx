@@ -24,7 +24,6 @@ function cleanBody(body) {
 }
 function App() {
   const [emails, setEmails] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -56,7 +55,7 @@ function App() {
 
       if (isManual) setLoading(true);
       try {
-        const url = `${PROXY_URL.replace(/\/$/, '')}/api/emails${filter === 'otp' ? '?filter=otp' : ''}`;
+        const url = `${PROXY_URL.replace(/\/$/, '')}/api/emails`;
         const resp = await fetch(url, {
           headers: {
             'Authorization': `Bearer ${PROXY_KEY}`
@@ -66,8 +65,6 @@ function App() {
         if (!resp.ok) throw new Error(`Proxy Error: ${resp.statusText}`);
 
         const data = await resp.json();
-
-        // Check for new emails to show a notification potentially (optional future extra)
         setEmails(data);
         setError(null);
       } catch (err) {
@@ -78,47 +75,12 @@ function App() {
     };
 
     fetchEmails();
-    interval = setInterval(() => fetchEmails(false), 30000); // Slower fallback polling (30s)
+    interval = setInterval(() => fetchEmails(false), 30000);
     return () => clearInterval(interval);
-  }, [filter, refreshTrigger]);
-
-  const handleManualRefresh = () => {
-    // We already have a fast interval, but users love pushing buttons
-    window.location.reload();
-  };
+  }, [refreshTrigger]);
 
   return (
-    <div className="container">
-      <div className="nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h1>AI Email Hub</h1>
-          <div className="live-indicator">
-            <div className="pulse"></div>
-            <span>LIVE</span>
-          </div>
-        </div>
-        <div className="filters">
-          <button
-            className="filter-btn"
-            style={{ marginRight: '8px', opacity: 0.5 }}
-            onClick={handleManualRefresh}
-          >
-            Refresh
-          </button>
-          <button
-            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            All
-          </button>
-          <button
-            className={`filter-btn ${filter === 'otp' ? 'active' : ''}`}
-            onClick={() => setFilter('otp')}
-          >
-            Codes Only
-          </button>
-        </div>
-      </div>
+    <div className="container" style={{ paddingTop: '20px' }}>
 
       {error && (
         <div className="error-banner">
