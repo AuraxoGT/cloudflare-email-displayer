@@ -28,6 +28,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     // 1. Real-time Push (SSE)
@@ -155,10 +156,12 @@ function App() {
                       className="otp-code"
                       onClick={() => {
                         navigator.clipboard.writeText(e.otp_code);
-                        alert('Code Copied!');
+                        setCopiedId(e.id);
+                        setTimeout(() => setCopiedId(null), 2000);
                       }}
                     >
                       {e.otp_code}
+                      {copiedId === e.id && <div className="copied-overlay">Copied</div>}
                     </div>
                   </div>
                 )}
