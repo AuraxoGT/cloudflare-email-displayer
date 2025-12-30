@@ -161,7 +161,7 @@ function App() {
                       }}
                     >
                       {e.otp_code}
-                      {copiedId === e.id && <div className="copied-overlay">Copied</div>}
+                      {copiedId === e.id && <div className="copied-overlay">COPIED ✅</div>}
                     </div>
                   </div>
                 )}
